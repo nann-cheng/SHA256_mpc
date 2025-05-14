@@ -29,16 +29,13 @@ pub struct GarbleResult{
 }
 
 
-//generate the whol sha256 circuit, as well as network part
+//generate the whol sha256 circuit
 #[derive(Debug)]
 pub struct Party{
     pub id: usize,//0 or 1 (garbler or evaluator)
     secret_bits: Vec<bool>,
     circuit:Sha256Circuit,
 }
-
-//TODO: Combine network logic altogether with  Party instantiation
-const SERVER_ADDRESSES: &'static str = "192.168.1.1:8088";
 
 impl Party {
     // Create a new party 
@@ -263,7 +260,7 @@ impl Party {
                 }
             }
 
-            println!("Evaluator: {}/{} blocks evluated.. ", i+1,block_cnt );
+            println!("Evaluator: {}/{} blocks evaluated.. ", i+1,block_cnt );
         }
         output_bits.reverse();
         convertBits2Bytes(&output_bits)

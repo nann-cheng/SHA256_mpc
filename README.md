@@ -15,7 +15,7 @@ The final implementation garbled circuit consider three gate types:
 
 `XOR` `AND` `INV` 
 
-in which the `XOR` and `INV` gate are cost-free. The final implementation skipped the oblivious transfer and the network communication, realized garbled circuit using protocols from the half-gate paper in [ZRE15](https://link.springer.com/chapter/10.1007/978-3-662-46803-6_8).
+in which the `XOR` and `INV` gate are "cost-free". The final implementation skipped the oblivious transfer and the network communication, realized garbled circuit using protocols from the half-gate paper in [ZRE15](https://link.springer.com/chapter/10.1007/978-3-662-46803-6_8).
 
 
 ## How to test

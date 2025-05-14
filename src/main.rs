@@ -17,7 +17,7 @@ fn main(){
 
     // Check if the user provided an argument
     if args.len() < 2 {
-        eprintln!("Usage: {} <positive_integer>", args[0]);
+        eprintln!("Please input a positive integer!");
         return;
     }
 
@@ -25,14 +25,22 @@ fn main(){
     let n: usize = match args[1].parse() {
         Ok(num) if num > 0 => num, // Check if the number is positive
         _ => {
-            eprintln!("Please provide a valid positive integer.");
+            eprintln!("Please provide a valid positive integer!");
             return;
         }
     };
 
     let mut rng = rand::thread_rng();
-    let mut message = vec![0u8; n];
-    rng.fill(&mut message[..]);
+    let mut message:Vec<u8> = Vec::new();
+    for _ in 0..n {
+        let random_char = if rng.gen_bool(0.5) { // Choose between uppercase and lowercase
+            rng.gen_range(b'A'..=b'Z') // Uppercase A-Z
+        } else {
+            rng.gen_range(b'a'..=b'z') // Lowercase a-z
+        };
+        message.push(random_char);
+    }
+
 
     let length = message.len();
     let mut vec0 = vec![0u8; length];
@@ -57,6 +65,7 @@ fn main(){
                          let output_bytes:Vec<u8> = p1.start_evaluating(&mut result);
                          let hex_string1: String = output_bytes.iter().map(|byte| format!("{:02x}", byte)).collect();
 
+                          println!("Input message: {}", String::from_utf8(message).expect("Invalid UTF-8 sequence"));
                           println!("Verify: The desired   hash computation: {}", desired_result);
                           println!("Verify: Final garbled hash computation: {}", hex_string1);
                           assert_eq!(hex_string1, desired_result,"The garbled result is wrong!!");
