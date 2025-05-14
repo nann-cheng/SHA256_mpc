@@ -3,10 +3,9 @@ use std::io::{self, BufRead};
 use std::collections::HashMap;
 use rand::Rng;
 
-use crate::utils::get_padded_bits;
+use crate::utils::convertBytes2Bits;
 
-
-const INITIAL_HASH_VALUES: [u8; 32] = [
+pub const INITIAL_HASH_VALUES: [u8; 32] = [
     0x6a, 0x09, 0xe6, 0x67, // H[0]
     0xbb, 0x67, 0xae, 0x85, // H[1]
     0x3c, 0x6e, 0xf3, 0x72, // H[2]
@@ -17,8 +16,14 @@ const INITIAL_HASH_VALUES: [u8; 32] = [
     0x5b, 0xe0, 0xcd, 0x19  // H[7]
 ];
 
+// const STATE_INPUTS_START_INDEX:usize = 512;
 
-#[derive(Debug)]
+pub const SINGLE_BLOCK_BITS_LEN:usize = 512;
+pub const STATE_INFO_BITS_LEN:usize = 256;
+pub const OUTPUT_BITS_LEN:usize = 256;
+pub const AND_GATES_CNT:usize = 22573;
+
+#[derive(Debug,Copy,Clone)]
 pub struct DoubleGate {
     pub input0: usize,
     pub input1: usize,
@@ -56,90 +61,46 @@ type GC_LABEL_TYPE = u128;
 
 #[derive(Debug)]
 pub struct Sha256Circuit {
+    pub initial_hash_vec:Vec<bool>,
     pub extra_input_wire:usize,
     pub gates: Vec<DoubleGate>,
+    pub extra_gates: Vec<DoubleGate>,//mpc part input gates, additional XORs
     pub NOT_Gates: HashMap<usize, usize>,
 
     pub xor_cnt:usize,//Circuit's total xor gates count
     pub and_cnt:usize,//Circuit's total and gates count
     pub inv_cnt:usize,//Circuit's total inv gates count
 
-    pub input_wires_0:Vec<usize>,//Party 0's input wires (as garbler)
-    pub input_wires_1:Vec<usize>,//Party 1's input wire (as evaluator)
-
-    pub public_input_wires:Vec<PublicWire>,//Public input wire (value known by both parties)
-
-    pub wire_cnt:usize,//Circuit's total wire count
     pub output_wire_ids:Vec<OutputWire>,//Circuit's output wire start index
 }
 
-//This class computes the actual circuit for Sha256(x0 XOR x_1), with a input of the message byte length, importantly it assumes len(x_0)=len(x_1)<=447 bits
+//This class computes the actual single block circuit for Sha256(x0 XOR x_1), with a input of the message byte length
 impl Sha256Circuit{
     pub fn new( byteLen:usize) -> io::Result<Self> {
-        assert!(byteLen <= 55,  "Input length exceeds maximum length of 447 bits");
+        // assert!(byteLen <= 55,  "Input length exceeds maximum length of 447 bits");
 
-	    let file = File::open("data/steven-sha256-bristol-basic.txt")?;
-	    // let file = File::open("data/nigel-sha256-bristol-basic.txt")?;
+	    // let file = File::open("data/steven-sha256-final.txt")?;
+	    let file = File::open("data/sha256-bristol-basic.txt")?;
 	    let reader = io::BufReader::new(file);
-
 	    //Initialize the vector to hold all (DoubleGate gates) (including NOT gate)
 	    let mut doubleGates: Vec<DoubleGate> = Vec::new();
         //Stores all (not gates) but in reverse order {w_out,w_in}
         let mut notGates: HashMap<usize, usize> = HashMap::new();
-
-        let mut in_wires0: Vec<usize> = Vec::new();
-        let mut in_wires1: Vec<usize> = Vec::new();
-        let mut public_input_wires: Vec<PublicWire> = Vec::new();
-
+   
 	    //Read lines from the file
         let mut xor_cnt:usize = 0;
         let mut and_cnt:usize = 0;
         let mut inv_cnt:usize = 0;
-        let mut input_wire_cnt_0:usize = 0;
+        let mut extra_input_wire:usize = 0;
 
-        let mut wire_cnt:usize = 0;
-
-        let OUTPUT_WIRE_INDEX: usize = 116502;
-        let extra_input_wire:usize =  OUTPUT_WIRE_INDEX + 256;
-
-        //Step0: mark all input wires(initial xor part for this specific test, two party compute xor of their sha256 result)
-        for i in 0..byteLen * 8{
-            let gate = DoubleGate {
-                        input0: extra_input_wire + 2*i,
-                        input1: extra_input_wire + 2*i +1,
-                        output: i,
-                        input0_flipped: false,
-                        input1_flipped: false,
-                        gateType: false,
-                    };
-            in_wires0.push(gate.input0);
-            in_wires1.push(gate.input1);
-
-            doubleGates.push(gate);
-            xor_cnt+=1;
-            wire_cnt+=1;
-            input_wire_cnt_0+=1;
-        }
-       
         let mut line_number:usize = 0;
 	    for line_result in reader.lines() {
 	        line_number += 1;
             let line = line_result?;
 	        let parts: Vec<&str> = line.split_whitespace().collect();
 	        if line_number==1{
-                let new_wire_cnt:usize = parts[1].parse().unwrap();
-                wire_cnt += new_wire_cnt;
-            }else if line_number == 2{
-                let input_cnt_0:usize = parts[0].parse().unwrap();
-                let input_cnt_1:usize = parts[1].parse().unwrap();
-
-                let remain_input_cnt:usize = (input_cnt_0 + input_cnt_1) - input_wire_cnt_0;
-
-                let padded_bits = get_padded_bits(byteLen);
-                for i in 0..remain_input_cnt{
-                    public_input_wires.push( PublicWire{id: input_wire_cnt_0 + i, bit: padded_bits[i] }  );
-                }
-            } else{ 
+                extra_input_wire = parts[1].parse().unwrap();
+            }else if line_number >= 5{ 
                 if parts.len() == 6 {//DoubleGate type
                     let gate = DoubleGate {
                         input0: parts[2].parse().unwrap(),
@@ -163,31 +124,42 @@ impl Sha256Circuit{
                 }
             }
 	    }
-
         
         let mut fina_output_wires:Vec<OutputWire> = Vec::new();
         for i in 0..256{
-            fina_output_wires.push(OutputWire{id: OUTPUT_WIRE_INDEX + i, input_id:0, should_trace: false} );
+            fina_output_wires.push(OutputWire{id: extra_input_wire - OUTPUT_BITS_LEN + i, input_id:0, should_trace: false} );
         }
-	    // let mut fina_output_wires = (0..256).map(|i| OUTPUT_WIRE_INDEX + i).collect();
+
         Self::mark_double_gates(&notGates, &mut doubleGates, &mut fina_output_wires);
 
+        let mut reversed_hash_vec = convertBytes2Bits(&INITIAL_HASH_VALUES.to_vec());
+        reversed_hash_vec.reverse();
         Ok(Sha256Circuit {
+            initial_hash_vec: reversed_hash_vec,
             extra_input_wire,
             gates: doubleGates,
+            extra_gates: Vec::new(),
             NOT_Gates: notGates,
 
             xor_cnt,
             and_cnt,
             inv_cnt,
-
-            input_wires_0: in_wires0,
-            input_wires_1: in_wires1,
-            
-            public_input_wires,
-            wire_cnt,
             output_wire_ids: fina_output_wires,
         })
+    }
+
+    pub fn get_initial_hash(&self,idx:usize) -> bool{
+        assert!(0<= idx && idx <= STATE_INFO_BITS_LEN-1,  "Input index is not in range [0,256)");
+
+        self.initial_hash_vec[idx]
+    }
+
+    pub fn update_extra_circuit(&mut self,extra_gates:&Vec<DoubleGate>){
+        self.extra_gates = Vec::new();
+        if extra_gates.len()>0 {
+            self.extra_gates.extend(extra_gates.iter().cloned());
+        }
+         self.extra_gates.extend(self.gates.iter().cloned());
     }
 
     //from not Gates mapping, add not marks onto associated double gates
@@ -245,12 +217,6 @@ impl Sha256Circuit{
             }
         }
     }
-
-    //with mutliple blocks of message (512bits per block), we need to re-numbering on the same single-block circuit topology
-    pub fn re_wiring_by_block(&mut self, block_cnt:usize) {
-        
-    }
-
 
     pub fn display(&self) {
         println!(" {} XOR", self.xor_cnt);
