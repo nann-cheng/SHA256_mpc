@@ -33,11 +33,12 @@ pub struct GarbleResult{
 #[derive(Debug)]
 pub struct Party{
     pub id: usize,//0 or 1 (garbler or evaluator)
-    pub ip: usize,
-    pub port: usize,
     secret_bits: Vec<bool>,
     circuit:Sha256Circuit,
 }
+
+//TODO: Combine network logic altogether with  Party instantiation
+const SERVER_ADDRESSES: &'static str = "192.168.1.1:8088";
 
 impl Party {
     // Create a new party 
@@ -48,19 +49,21 @@ impl Party {
                 io::Error::new(io::ErrorKind::Other, "Circuit creation failed")
             })?;
         
-        if role==0{ m_circuit.display();  }
+        if role==0{ //server as garbler
+            m_circuit.display();
+        }else{//client as evaluator
+        }
+
 
         // Return the new Party instance
         Ok(Party{
             id:role,
-            ip:0,
-            port:0,
+            // network:network_interface,
             secret_bits: convertBytes2Bits(message).to_vec(),
             circuit: m_circuit,
         })
     }
-
-    //TODO: first message from evaluator, to get the masked string for use in the OT protocol
+    
     pub fn send_XOR_bits(&self){
     }
 
@@ -103,7 +106,8 @@ impl Party {
         }
 
         for i in 0..block_cnt{
-            println!("Start to process block {}", i);
+            
+            
             // It stores every k-v: wire_number - evaluation results
             let mut zero_label_map: HashMap<usize, EvalWire> = HashMap::new();
 
@@ -164,10 +168,11 @@ impl Party {
                         }
                     },
                     None => {
-                        // println!("Output wire {} not found!!", real_id);
+                        println!("Output wire {} not found!!", real_id);
                     },
                 }
             }
+            println!("Garbler: {}/{} blocks garbled.",i+1,block_cnt);
         }
         
        let ret=GarbleResult{ p0_labels: p0_vec,  p1_labels: p1_ot_vec,
@@ -194,7 +199,6 @@ impl Party {
         let mut last_evaluation_result: Vec<WireLabel> = vec![ WireLabel::zero(); OUTPUT_BITS_LEN ];
         let mut output_bits: Vec<bool> =  Vec::with_capacity(OUTPUT_BITS_LEN);
         for i in 0..block_cnt{
-            println!("Start to process block {}", i);
             // It stores every k-v: wire_number - evaluation results
             let mut evaluate_label_map: HashMap<usize, WireLabel> = HashMap::new();
             //Process the first input: 512 bits block
@@ -254,10 +258,12 @@ impl Party {
                         }
                     },
                     None => {
-                        // println!("Output wire {} not found!!", real_id);
+                        println!("Output wire {} not found!!", real_id);
                     },
                 }
             }
+
+            println!("Evaluator: {}/{} blocks evluated.. ", i+1,block_cnt );
         }
         output_bits.reverse();
         convertBits2Bytes(&output_bits)

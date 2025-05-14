@@ -16,7 +16,6 @@ pub const INITIAL_HASH_VALUES: [u8; 32] = [
     0x5b, 0xe0, 0xcd, 0x19  // H[7]
 ];
 
-// const STATE_INPUTS_START_INDEX:usize = 512;
 
 pub const SINGLE_BLOCK_BITS_LEN:usize = 512;
 pub const STATE_INFO_BITS_LEN:usize = 256;
@@ -48,7 +47,6 @@ pub struct OutputWire {
     pub should_trace: bool,
 }
 
-
 #[derive(Debug)]
 pub struct PlainEvalWire {
     pub val: bool,
@@ -77,9 +75,6 @@ pub struct Sha256Circuit {
 //This class computes the actual single block circuit for Sha256(x0 XOR x_1), with a input of the message byte length
 impl Sha256Circuit{
     pub fn new( byteLen:usize) -> io::Result<Self> {
-        // assert!(byteLen <= 55,  "Input length exceeds maximum length of 447 bits");
-
-	    // let file = File::open("data/steven-sha256-final.txt")?;
 	    let file = File::open("data/sha256-bristol-basic.txt")?;
 	    let reader = io::BufReader::new(file);
 	    //Initialize the vector to hold all (DoubleGate gates) (including NOT gate)
@@ -219,8 +214,9 @@ impl Sha256Circuit{
     }
 
     pub fn display(&self) {
-        println!(" {} XOR", self.xor_cnt);
-        println!(" {} AND", self.and_cnt);
-        println!(" {} INV", self.inv_cnt);
+        println!("sha256 Boolean Circuit has:\n");
+        println!(" {} XOR gates", self.xor_cnt);
+        println!(" {} AND gates", self.and_cnt);
+        println!(" {} INV gates", self.inv_cnt);
     }
 }

@@ -30,7 +30,6 @@ impl WireLabel {
         WireLabel(existing) // Use the existing array to initialize the new WireLabel
     }
 
-
     pub fn zero() -> Self {
         WireLabel([0; LABEL_SECURITY_LEVEL])
     }
@@ -102,8 +101,6 @@ pub struct GarbleAnd {
     pub T_G: WireLabel,
     pub T_E: WireLabel,
 }
-
-
 
 impl GarbledCircuit {
     pub fn new() -> Self {
@@ -233,17 +230,18 @@ impl GarbledCircuit {
                let p_a:bool = wa_0.check_last_bit();//input wire 0 permutation bit
                let p_b:bool = wb_0.check_last_bit(); //input wire 1 permutation bit
                 
-                //TODO: Optimize the call to H call 
                 //step-0: First half gate
-                let mut T_G:WireLabel = self.prf_update(&wa_0, j) ^ self.prf_update(&wa_1, j);
+                let mut wa_0_enc = self.prf_update(&wa_0, j);
+                let mut T_G:WireLabel = wa_0_enc ^ self.prf_update(&wa_1, j);
                 if p_b{ T_G ^= self.global_R; }
                  // Step 1: Calculate W_G
-                let mut WG_0: WireLabel = self.prf_update(&wa_0, j);
+                let mut WG_0: WireLabel = wa_0_enc;
                 if p_a{  WG_0 ^= T_G;   }
 
                 // Step 2: Second half gate
-                let mut T_E: WireLabel = self.prf_update(&wb_0, j_prime) ^ self.prf_update(&wb_1, j_prime) ^ wa_0;
-                let mut  WE_0: WireLabel = self.prf_update(&wb_0, j_prime);
+                let mut wb_0_enc = self.prf_update(&wb_0, j_prime);
+                let mut T_E: WireLabel = wb_0_enc ^ self.prf_update(&wb_1, j_prime) ^ wa_0;
+                let mut  WE_0: WireLabel = wb_0_enc;
                 if p_b{ WE_0 ^= wa_0 ^ T_E; }
 
                 //Returning the output values
@@ -252,8 +250,6 @@ impl GarbledCircuit {
                 //I Should set the flipped bit here as false, because AND gate renews everything
                 zero_label_map.insert(gate.output, EvalWire{label:  WG_0 ^ WE_0, flipped: false} );
             }else{//FREE XOR, need to compute the output zero label
-                // debug_cnt+=1;
-                // self.evaluate_XOR_gate(&mut zero_label_map, gate);
                 self.evaluate_XOR_gate(zero_label_map, gate);
             }
         }
@@ -276,7 +272,6 @@ impl GarbledCircuit {
                                 //decrypt garbled table from here
                                 let s_a:bool = wa.check_last_bit();//input wire 0 permutation bit
                                 let s_b:bool = wb.check_last_bit();//input wire 1 permutation bit
-                                //TODO: Optimize call to H only once 
                                 //step-0: First half gate
                                 if let Some(garbled) = garbled_gates.pop_front() {
                                     let mut T_G:WireLabel = garbled.T_G;
@@ -289,8 +284,7 @@ impl GarbledCircuit {
                                     // Step 2: Second half gate
                                     let mut WE: WireLabel = self.prf_update(&wb, j_prime);
                                     if s_b{ WE ^= wa ^ T_E; }
-                                    //I Should set the flipped bit here as false, because AND gate renews everything
-                                    evaluate_label_map.insert(gate.output,   WG ^ WE );
+                                    evaluate_label_map.insert(gate.output, WG ^ WE );
                                 }
                             },
                             None => {
@@ -323,15 +317,5 @@ impl GarbledCircuit {
                 }
             }
         }
-    }
-}
-
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_garbled_circuit_skeleton() {
     }
 }

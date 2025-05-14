@@ -9,15 +9,32 @@ use std::collections::VecDeque;
 use crate::gc::WireLabel;
 use crate::gc::GarbleAnd;
 use rand::Rng;
+use std::env;
 
 fn main(){
-    // let rawData = b"abdc";
-    let rawData = b"abdcabdcbdcabdcabdcabdcbdcabdcabdcabdcbdcabdcabdcabdcbdcabdcabdcabdcbdcabdcabdcababdcabdcabdcbdcabdcb";
-    let message = rawData.to_vec();
-    let length = message.len();
+    // Collect command-line arguments into a vector
+    let args: Vec<String> = env::args().collect();
 
-    // Create two vectors of the same length
+    // Check if the user provided an argument
+    if args.len() < 2 {
+        eprintln!("Usage: {} <positive_integer>", args[0]);
+        return;
+    }
+
+    // Parse the argument as a positive integer
+    let n: usize = match args[1].parse() {
+        Ok(num) if num > 0 => num, // Check if the number is positive
+        _ => {
+            eprintln!("Please provide a valid positive integer.");
+            return;
+        }
+    };
+
     let mut rng = rand::thread_rng();
+    let mut message = vec![0u8; n];
+    rng.fill(&mut message[..]);
+
+    let length = message.len();
     let mut vec0 = vec![0u8; length];
     let mut vec1 = vec![0u8; length];
     rng.fill(&mut vec0[..]);
@@ -27,11 +44,14 @@ fn main(){
         vec1[i] = message[i] ^ vec0[i];
     }
 
-    let desired_result = utils::sha256(rawData);
+    let desired_result = utils::sha256(message.as_slice());
     //----- Garbled circuit evaluation test on the sha256 circuit------------//
     let p0 =  match party::Party::new(0,&vec0){
             Ok(mut p0) => {
             let mut result:GarbleResult = p0.start_garbling( );
+
+            println!("\n ................................................... \n");
+
                 let p1 =  match party::Party::new(1,&vec1){
                 Ok(mut p1) => {
                          let output_bytes:Vec<u8> = p1.start_evaluating(&mut result);
