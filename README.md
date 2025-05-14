@@ -20,6 +20,8 @@ in which the `XOR` and `INV` gate are cost-free. The final implementation skippe
 
 ## How to test
 
-By the root directory, run 
+By the root directory, run
+
 `cargo run -- n` 
+
 where n is a postive integer indicating the bytes length of x0/x1.
