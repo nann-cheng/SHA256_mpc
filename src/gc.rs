@@ -41,11 +41,11 @@ impl WireLabel {
         // GenericArray::from_slice(&self.0)
     }
 
-    pub fn flip_last_bit(&mut self){
+    pub fn reset_lsb(&mut self){
         self.0[LABEL_SECURITY_LEVEL-1] |= 1;
     }
 
-    pub fn check_last_bit(&self)-> bool{
+    pub fn check_lsb(&self)-> bool{
         (self.0[LABEL_SECURITY_LEVEL-1] & 1) == 1
     }
 }
@@ -119,7 +119,7 @@ impl GarbledCircuit {
         let mut empty_global_R = [0u8;LABEL_SECURITY_LEVEL];
         m_rng.fill(&mut empty_global_R);
         let mut global:WireLabel = WireLabel(empty_global_R);
-        global.flip_last_bit(); // Set the LSB of the last bit to 1
+        global.reset_lsb(); // guarantee the LSB (least significant bit)to be 1
 
         // println!("Debug: global R is {:?}", global);
 
@@ -140,9 +140,7 @@ impl GarbledCircuit {
     fn prf_update(&self, label:&WireLabel, tweak:u64) -> WireLabel {
          // Prepare a mutable block for encryption
         let mut block = label.to_generic_array();
-
         // XOR the tweak into the last 8 bytes (very naive):
-        // This is only a placeholder to show "some" usage of a tweak.
         let tweak_bytes = tweak.to_le_bytes();
         for i in 0..8 {
             block[8 + i] ^= tweak_bytes[i];
@@ -176,7 +174,6 @@ impl GarbledCircuit {
             },
         }
     }
-
 
     //Assume party 0 as the garbler, he holds his partial inputs and the public circuit
     pub fn garble_circuit(&mut self, circuit:& Sha256Circuit, zero_label_map:&mut HashMap<usize, EvalWire>)-> Vec<GarbleAnd>{
@@ -227,8 +224,8 @@ impl GarbledCircuit {
                     },
                 }
                 //make garbled table from here, firstly update zero_label depending on flipped state
-               let p_a:bool = wa_0.check_last_bit();//input wire 0 permutation bit
-               let p_b:bool = wb_0.check_last_bit(); //input wire 1 permutation bit
+               let p_a:bool = wa_0.check_lsb();//input wire 0 permutation bit
+               let p_b:bool = wb_0.check_lsb(); //input wire 1 permutation bit
                 
                 //step-0: First half gate
                 let mut wa_0_enc = self.prf_update(&wa_0, j);
@@ -270,8 +267,8 @@ impl GarbledCircuit {
                             Some(eval_wire1) => {
                                 let wb:WireLabel = eval_wire1.clone();
                                 //decrypt garbled table from here
-                                let s_a:bool = wa.check_last_bit();//input wire 0 permutation bit
-                                let s_b:bool = wb.check_last_bit();//input wire 1 permutation bit
+                                let s_a:bool = wa.check_lsb();//input wire 0 permutation bit
+                                let s_b:bool = wb.check_lsb();//input wire 1 permutation bit
                                 //step-0: First half gate
                                 if let Some(garbled) = garbled_gates.pop_front() {
                                     let mut T_G:WireLabel = garbled.T_G;

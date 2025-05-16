@@ -159,7 +159,7 @@ impl Party {
                         if i < block_cnt-1{
                             last_evaluation_result[k] =  EvalWire{label:  wire.label, flipped: output_wire.should_trace ^ wire.flipped };//flip real_input wire to the next round evaluation
                         }else{
-                            let mut output_p_bit:bool = wire.label.check_last_bit();
+                            let mut output_p_bit:bool = wire.label.check_lsb();
                             output_p_bit ^= wire.flipped;
                             output_permutation_bits.push(output_p_bit);//This should be the real output wire zero label last bit
                         }
@@ -250,7 +250,7 @@ impl Party {
                             last_evaluation_result[k] = wire.clone();
                         }else{//decrypt output
                             let mut out_bit:bool= ret.permu_bits[k];
-                            out_bit ^= wire.check_last_bit();
+                            out_bit ^= wire.check_lsb();
                             output_bits.push(out_bit);
                         }
                     },
