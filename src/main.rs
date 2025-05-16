@@ -1,17 +1,17 @@
 mod circuit;
-mod utils;
-mod party;
 mod gc;
+mod party;
+mod utils;
 
-use crate::gc::GarbledCircuit;
-use crate::party::GarbleResult;
-use std::collections::VecDeque;
-use crate::gc::WireLabel;
 use crate::gc::GarbleAnd;
+use crate::gc::GarbledCircuit;
+use crate::gc::WireLabel;
+use crate::party::GarbleResult;
 use rand::Rng;
+use std::collections::VecDeque;
 use std::env;
 
-fn main(){
+fn main() {
     // Collect command-line arguments into a vector
     let args: Vec<String> = env::args().collect();
 
@@ -31,16 +31,16 @@ fn main(){
     };
 
     let mut rng = rand::thread_rng();
-    let mut message:Vec<u8> = Vec::new();
+    let mut message: Vec<u8> = Vec::new();
     for _ in 0..n {
-        let random_char = if rng.gen_bool(0.5) { // Choose between uppercase and lowercase
+        let random_char = if rng.gen_bool(0.5) {
+            // Choose between uppercase and lowercase
             rng.gen_range(b'A'..=b'Z') // Uppercase A-Z
         } else {
             rng.gen_range(b'a'..=b'z') // Lowercase a-z
         };
         message.push(random_char);
     }
-
 
     let length = message.len();
     let mut vec0 = vec![0u8; length];
@@ -54,30 +54,35 @@ fn main(){
 
     let desired_result = utils::sha256(message.as_slice());
     //----- Garbled circuit evaluation test on the sha256 circuit------------//
-    let p0 =  match party::Party::new(0,&vec0){
-            Ok(mut p0) => {
-            let mut result:GarbleResult = p0.start_garbling( );
+    let p0 = match party::Party::new(0, &vec0) {
+        Ok(mut p0) => {
+            let mut result: GarbleResult = p0.start_garbling();
 
             println!("\n ................................................... \n");
 
-                let p1 =  match party::Party::new(1,&vec1){
+            let p1 = match party::Party::new(1, &vec1) {
                 Ok(mut p1) => {
-                         let output_bytes:Vec<u8> = p1.start_evaluating(&mut result);
-                         let hex_string1: String = output_bytes.iter().map(|byte| format!("{:02x}", byte)).collect();
+                    let output_bytes: Vec<u8> = p1.start_evaluating(&mut result);
+                    let hex_string1: String = output_bytes
+                        .iter()
+                        .map(|byte| format!("{:02x}", byte))
+                        .collect();
 
-                          println!("Input message: {}", String::from_utf8(message).expect("Invalid UTF-8 sequence"));
-                          println!("Verify: The desired   hash computation: {}", desired_result);
-                          println!("Verify: Final garbled hash computation: {}", hex_string1);
-                          assert_eq!(hex_string1, desired_result,"The garbled result is wrong!!");
-
-                        },
-                        Err(e) => {
-                        println!("Failed to create circuit: {}", e);
-                    },
-                };
-            },
-            Err(e) => {
+                    println!(
+                        "Input message: {}",
+                        String::from_utf8(message).expect("Invalid UTF-8 sequence")
+                    );
+                    println!("Verify: The desired   hash computation: {}", desired_result);
+                    println!("Verify: Final garbled hash computation: {}", hex_string1);
+                    assert_eq!(hex_string1, desired_result, "The garbled result is wrong!!");
+                }
+                Err(e) => {
+                    println!("Failed to create circuit: {}", e);
+                }
+            };
+        }
+        Err(e) => {
             println!("Failed to create circuit: {}", e);
-        },
+        }
     };
 }
