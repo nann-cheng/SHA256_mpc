@@ -3,12 +3,9 @@ mod gc;
 mod party;
 mod utils;
 
-use crate::gc::GarbleAnd;
 use crate::gc::GarbledCircuit;
-use crate::gc::WireLabel;
 use crate::party::GarbleResult;
 use rand::Rng;
-use std::collections::VecDeque;
 use std::env;
 
 fn main() {
@@ -54,13 +51,13 @@ fn main() {
 
     let desired_result = utils::sha256(message.as_slice());
     //----- Garbled circuit evaluation test on the sha256 circuit------------//
-    let p0 = match party::Party::new(0, &vec0) {
+    match party::Party::new(0, &vec0) {
         Ok(mut p0) => {
             let mut result: GarbleResult = p0.start_garbling();
 
             println!("\n ................................................... \n");
 
-            let p1 = match party::Party::new(1, &vec1) {
+            match party::Party::new(1, &vec1) {
                 Ok(mut p1) => {
                     let output_bytes: Vec<u8> = p1.start_evaluating(&mut result);
                     let hex_string1: String = output_bytes

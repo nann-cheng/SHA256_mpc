@@ -21,7 +21,7 @@ pub const OUTPUT_BITS_LEN: usize = 256;
 pub const AND_GATES_CNT: usize = 22573;
 
 #[derive(Debug, Copy, Clone)]
-pub struct DoubleGate {
+pub struct XorAndGate {
     pub input0: usize,
     pub input1: usize,
     pub output: usize,
@@ -29,13 +29,7 @@ pub struct DoubleGate {
     pub input0_flipped: bool,
     pub input1_flipped: bool,
 
-    pub gateType: bool, //false: XOR gate, true; AND gate
-}
-
-#[derive(Debug)]
-pub struct PublicWire {
-    pub id: usize,
-    pub bit: bool, //These are like public inputs: like public known padded bits and (will be used for the real sha256 circuit admitting initial constant HASH Vector)
+    pub gate_type: bool, //false: XOR gate, true; AND gate
 }
 
 #[derive(Debug)]
@@ -45,23 +39,18 @@ pub struct OutputWire {
     pub should_trace: bool,
 }
 
-#[derive(Debug)]
-pub struct PlainEvalWire {
-    pub val: bool,
-    pub flipped: bool,
-}
-
-/*  For garbled circuit related definitions */
-type GC_LABEL_TYPE = u128;
-/*  For garbled circuit related definitions */
+// #[derive(Debug)]
+// pub struct PlainEvalWire {
+//     pub val: bool,
+//     pub flipped: bool,
+// }
 
 #[derive(Debug)]
 pub struct Sha256Circuit {
     pub initial_hash_vec: Vec<bool>,
     pub extra_input_wire: usize,
-    pub gates: Vec<DoubleGate>,
-    pub extra_gates: Vec<DoubleGate>, //mpc part input gates, additional XORs
-    pub NOT_Gates: HashMap<usize, usize>,
+    pub gates: Vec<XorAndGate>,
+    pub extra_gates: Vec<XorAndGate>, //mpc part input gates, additional XORs
 
     pub xor_cnt: usize, //Circuit's total xor gates count
     pub and_cnt: usize, //Circuit's total and gates count
@@ -72,13 +61,13 @@ pub struct Sha256Circuit {
 
 //This class computes the actual single block circuit for Sha256(x0 XOR x_1), with a input of the message byte length
 impl Sha256Circuit {
-    pub fn new(byteLen: usize) -> io::Result<Self> {
+    pub fn new() -> io::Result<Self> {
         let file = File::open("data/sha256-bristol-basic.txt")?;
         let reader = io::BufReader::new(file);
-        //Initialize the vector to hold all (DoubleGate gates) (including NOT gate)
-        let mut doubleGates: Vec<DoubleGate> = Vec::new();
+        //Initialize the vector to hold all (XorAndGate gates) (including NOT gate)
+        let mut xor_and_gates: Vec<XorAndGate> = Vec::new();
         //Stores all (not gates) but in reverse order {w_out,w_in}
-        let mut notGates: HashMap<usize, usize> = HashMap::new();
+        let mut inv_gates_map: HashMap<usize, usize> = HashMap::new();
 
         //Read lines from the file
         let mut xor_cnt: usize = 0;
@@ -95,27 +84,27 @@ impl Sha256Circuit {
                 extra_input_wire = parts[1].parse().unwrap();
             } else if line_number >= 5 {
                 if parts.len() == 6 {
-                    //DoubleGate type
-                    let gate = DoubleGate {
+                    //XorAndGate type
+                    let gate = XorAndGate {
                         input0: parts[2].parse().unwrap(),
                         input1: parts[3].parse().unwrap(),
                         output: parts[4].parse().unwrap(),
                         input0_flipped: false,
                         input1_flipped: false,
-                        gateType: parts[5].to_string() == "AND",
+                        gate_type: parts[5] == "AND",
                     };
-                    if !gate.gateType {
-                        xor_cnt += 1; // Increment xor_cnt if gate.gateType is false
+                    if !gate.gate_type {
+                        xor_cnt += 1; // Increment xor_cnt if gate.gate_type is false
                     } else {
-                        and_cnt += 1; // Increment and_cnt if gate.gateType is true
+                        and_cnt += 1; // Increment and_cnt if gate.gate_type is true
                     }
-                    doubleGates.push(gate);
+                    xor_and_gates.push(gate);
                 } else {
                     //NOT gate type
                     let input: usize = parts[2].parse().unwrap();
                     let output: usize = parts[3].parse().unwrap();
                     inv_cnt += 1;
-                    notGates.insert(output, input);
+                    inv_gates_map.insert(output, input);
                 }
             }
         }
@@ -129,16 +118,15 @@ impl Sha256Circuit {
             });
         }
 
-        Self::mark_double_gates(&notGates, &mut doubleGates, &mut fina_output_wires);
+        Self::mark_double_gates(&inv_gates_map, &mut xor_and_gates, &mut fina_output_wires);
 
-        let mut reversed_hash_vec = convert_bytes2_bits(&INITIAL_HASH_VALUES.to_vec());
+        let mut reversed_hash_vec = convert_bytes2_bits(INITIAL_HASH_VALUES.as_ref());
         reversed_hash_vec.reverse();
         Ok(Sha256Circuit {
             initial_hash_vec: reversed_hash_vec,
             extra_input_wire,
-            gates: doubleGates,
+            gates: xor_and_gates,
             extra_gates: Vec::new(),
-            NOT_Gates: notGates,
 
             xor_cnt,
             and_cnt,
@@ -149,16 +137,16 @@ impl Sha256Circuit {
 
     pub fn get_initial_hash(&self, idx: usize) -> bool {
         assert!(
-            0 <= idx && idx <= STATE_INFO_BITS_LEN - 1,
+            (0..=STATE_INFO_BITS_LEN - 1).contains(&idx),
             "Input index is not in range [0,256)"
         );
 
         self.initial_hash_vec[idx]
     }
 
-    pub fn update_extra_circuit(&mut self, extra_gates: &Vec<DoubleGate>) {
+    pub fn update_extra_circuit(&mut self, extra_gates: &[XorAndGate]) {
         self.extra_gates = Vec::new();
-        if extra_gates.len() > 0 {
+        if !extra_gates.is_empty() {
             self.extra_gates.extend(extra_gates.iter().cloned());
         }
         self.extra_gates.extend(self.gates.iter().cloned());
@@ -167,51 +155,39 @@ impl Sha256Circuit {
     //from not Gates mapping, add not marks onto associated double gates
     //process every input wire, if it's the output of an And gate, mark flip bit as true
     fn mark_double_gates(
-        notGates: &HashMap<usize, usize>,
-        doubleGates: &mut Vec<DoubleGate>,
+        inv_gates: &HashMap<usize, usize>,
+        xor_and_gates: &mut [XorAndGate],
         output_wire_ids: &mut Vec<OutputWire>,
     ) {
-        for gate in doubleGates.iter_mut() {
+        for gate in xor_and_gates.iter_mut() {
             let mut tmp_input0: usize = gate.input0;
             let mut flip_bit0: bool = false;
             let mut tmp_input1: usize = gate.input1;
             let mut flip_bit1: bool = false;
-            loop {
-                match notGates.get(&tmp_input0) {
-                    Some(&value) => {
-                        tmp_input0 = value;
-                        flip_bit0 = !flip_bit0;
-                    }
-                    None => {
-                        break;
-                    }
-                }
+
+            while let Some(&value) = inv_gates.get(&tmp_input0) {
+                tmp_input0 = value;
+                flip_bit0 = !flip_bit0;
             }
-            loop {
-                match notGates.get(&tmp_input1) {
-                    Some(&value) => {
-                        tmp_input1 = value;
-                        flip_bit1 = !flip_bit1;
-                    }
-                    None => {
-                        break;
-                    }
-                }
+            while let Some(&value) = inv_gates.get(&tmp_input1) {
+                tmp_input1 = value;
+                flip_bit1 = !flip_bit1;
             }
+
             gate.input0 = tmp_input0;
             gate.input1 = tmp_input1;
             gate.input0_flipped = flip_bit0;
             gate.input1_flipped = flip_bit1;
         }
 
-        //Why need to process output_ids? they may come after a not gate, these wires are never processed (as last layers, never as input to gate) move the output ids directly to doubleGates, this is to remove last layer outputs
+        //Why need to process output_ids? they may come after a not gate, these wires are never processed (as last layers, never as input to gate) move the output ids directly to xor_and_gates, this is to remove last layer outputs
         //this specially marked output wire that is deriving from a not gate, because they are currently ignored by gate evaluation
-        for (index, output_wire) in output_wire_ids.iter_mut().enumerate() {
-            match notGates.get(&output_wire.id) {
+        for output_wire in output_wire_ids {
+            match inv_gates.get(&output_wire.id) {
                 //If output id is the output wire of a not gate
                 Some(&input_id) => {
                     //find the specified gate in self.gates and change the internal data
-                    for gate in doubleGates.iter_mut().rev() {
+                    for gate in xor_and_gates.iter_mut().rev() {
                         //Reverse iterate using into_iter() and rev()
                         if input_id == gate.output {
                             output_wire.input_id = input_id;
@@ -227,7 +203,7 @@ impl Sha256Circuit {
     }
 
     pub fn display(&self) {
-        println!("sha256 Boolean Circuit has:\n");
+        println!("The single block sha256 Boolean circuit has:\n");
         println!(" {} XOR gates", self.xor_cnt);
         println!(" {} AND gates", self.and_cnt);
         println!(" {} INV gates", self.inv_cnt);
