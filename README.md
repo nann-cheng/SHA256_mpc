@@ -1,7 +1,7 @@
 # GC
 This is a prototype Garbled Circuit implementation for the functionality 
 
-`f: x0, x1 \rightarrow Sha256(x0 XOR x1)`
+`f: x0, x1 -> Sha256(x0 XOR x1)`
 
 where P0 has the value x0 (n bytes), and P1 has the value x1 (n bytes). 
 
@@ -11,7 +11,7 @@ The final multiple block chained circuit is derived from the Bristol boolean cir
 
 
 ## The Garbled Circuit implementation
-The final implementation garbled circuit consider three gate types:
+The final garbled circuit implementation consider three gate types:
 
 `XOR` `AND` `INV` 
 
